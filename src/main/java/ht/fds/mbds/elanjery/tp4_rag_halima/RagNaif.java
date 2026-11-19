@@ -25,27 +25,28 @@ import dev.langchain4j.store.embedding.inmemory.InMemoryEmbeddingStore;
 
 import java.util.List;
 import java.util.Scanner;
+import java.util.logging.Logger;
+import java.util.logging.Level;
+import java.util.logging.ConsoleHandler;
 
 public class RagNaif {
 
     public static void main(String[] args) {
 
-        // PHASE 1 : Chargement et découpage du PDF
+        // Configuration du logging
+        configureLogger();
 
+        // PHASE 1 : Chargement et découpage du PDF
         System.out.println("Chargement du document PDF...");
 
-        ApacheTikaDocumentParser parser =
-                new ApacheTikaDocumentParser();
+        ApacheTikaDocumentParser parser = new ApacheTikaDocumentParser();
 
-        Document document = ClassPathDocumentLoader.loadDocument(
-                "rag.pdf",
-                parser
-        );
+        Document document =
+                ClassPathDocumentLoader.loadDocument("rag.pdf", parser);
 
         System.out.println("Document chargé avec succès.");
 
-        DocumentSplitter splitter =
-                DocumentSplitters.recursive(300, 30);
+        DocumentSplitter splitter = DocumentSplitters.recursive(300, 30);
 
         List<TextSegment> segments = splitter.split(document);
 
@@ -53,7 +54,6 @@ public class RagNaif {
 
 
         // PHASE 2 : Création des embeddings
-
         System.out.println("\nCréation du modèle d'embedding...");
 
         EmbeddingModel embeddingModel =
@@ -66,7 +66,6 @@ public class RagNaif {
 
 
         // PHASE 3 : Stockage vectoriel
-
         System.out.println("\nCréation de la base vectorielle...");
 
         InMemoryEmbeddingStore<TextSegment> embeddingStore =
@@ -77,8 +76,7 @@ public class RagNaif {
         System.out.println("Stockage terminé.");
 
 
-        // PHASE 4 : Création du moteur de recherche RAG
-
+        // PHASE 4 : Création du ContentRetriever
         System.out.println("\nCréation du moteur de recherche...");
 
         ContentRetriever contentRetriever =
@@ -92,8 +90,7 @@ public class RagNaif {
         System.out.println("Moteur de recherche créé.");
 
 
-        // PHASE 5 : Création du modèle Gemini
-
+        // PHASE 5 : Initialisation de Gemini
         System.out.println("\nInitialisation de Gemini...");
 
         String apiKey = System.getenv("GEMINI_KEY");
@@ -113,14 +110,12 @@ public class RagNaif {
         System.out.println("Gemini initialisé.");
 
 
-        // PHASE 6 : Création de la mémoire conversationnelle
-
+        // PHASE 6 : Création de la mémoire
         MessageWindowChatMemory chatMemory =
                 MessageWindowChatMemory.withMaxMessages(10);
 
 
         // PHASE 7 : Création de l'assistant RAG
-
         Assistant assistant = AiServices.builder(Assistant.class)
                 .chatModel(chatModel)
                 .chatMemory(chatMemory)
@@ -130,37 +125,57 @@ public class RagNaif {
         System.out.println("\nAssistant RAG prêt !");
 
 
-        // PHASE 8 : Interaction avec l'utilisateur
+        // PHASE 8 : Conversation avec l'assistant
+        conversationAvec(assistant);
+    }
 
-        Scanner scanner = new Scanner(System.in);
 
-        System.out.println("\n==================================");
-        System.out.println("       ASSISTANT RAG");
-        System.out.println("==================================");
-        System.out.println("Pose tes questions sur le cours.");
-        System.out.println("Tape 'exit' pour quitter.");
+    // Configuration du logging LangChain4j
+    private static void configureLogger() {
 
-        while (true) {
+        Logger packageLogger = Logger.getLogger("dev.langchain4j");
 
-            System.out.print("\nVotre question : ");
+        packageLogger.setLevel(Level.FINE);
 
-            String question = scanner.nextLine();
+        ConsoleHandler handler = new ConsoleHandler();
 
-            if (question.equalsIgnoreCase("exit")) {
-                System.out.println("Fin de la conversation.");
-                break;
+        handler.setLevel(Level.FINE);
+
+        packageLogger.addHandler(handler);
+    }
+
+
+    // Conversation avec plusieurs questions
+    private static void conversationAvec(Assistant assistant) {
+
+        try (Scanner scanner = new Scanner(System.in)) {
+
+            System.out.println("\n==================================");
+            System.out.println("          ASSISTANT RAG");
+            System.out.println("==================================");
+            System.out.println("Pose tes questions sur le cours.");
+            System.out.println("Tape 'fin' pour quitter.");
+
+            while (true) {
+
+                System.out.println("\nPose ta question : ");
+
+                String question = scanner.nextLine();
+
+                if (question.isBlank()) {
+                    continue;
+                }
+
+                if ("fin".equalsIgnoreCase(question)) {
+                    System.out.println("Fin de la conversation.");
+                    break;
+                }
+
+                String reponse = assistant.chat(question);
+
+                System.out.println("\nAssistant : ");
+                System.out.println(reponse);
             }
-
-            if (question.isBlank()) {
-                continue;
-            }
-
-            String reponse = assistant.chat(question);
-
-            System.out.println("\nRéponse de Gemini :");
-            System.out.println(reponse);
         }
-
-        scanner.close();
     }
 }
